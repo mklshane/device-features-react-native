@@ -5,6 +5,8 @@ type ConfirmDeleteModalProps = {
   visible: boolean;
   title: string;
   message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
   accentColor: string;
   backgroundColor: string;
   textColor: string;
@@ -18,6 +20,8 @@ export const ConfirmDeleteModal = ({
   visible,
   title,
   message,
+  confirmLabel = 'Delete',
+  cancelLabel = 'Cancel',
   accentColor,
   backgroundColor,
   textColor,
@@ -34,11 +38,11 @@ export const ConfirmDeleteModal = ({
           <Text style={[styles.message, { color: secondaryTextColor }]}>{message}</Text>
 
           <View style={styles.actions}>
-            <Pressable style={[styles.button, styles.cancelButton]} onPress={onCancel}>
-              <Text style={[styles.buttonText, { color: textColor }]}>Cancel</Text>
+            <Pressable style={[styles.button, styles.cancelButton, { borderColor }]} onPress={onCancel}>
+              <Text style={[styles.buttonText, { color: textColor }]}>{cancelLabel}</Text>
             </Pressable>
             <Pressable style={[styles.button, { backgroundColor: accentColor }]} onPress={onConfirm}>
-              <Text style={[styles.buttonText, styles.confirmText]}>Delete</Text>
+              <Text style={[styles.buttonText, styles.confirmText]}>{confirmLabel}</Text>
             </Pressable>
           </View>
         </View>
@@ -86,7 +90,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#EFEFEF',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
   },
   buttonText: {
     fontFamily: 'Inter_600SemiBold',

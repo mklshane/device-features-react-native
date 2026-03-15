@@ -10,6 +10,7 @@ import { LocationData } from '../types';
 import { Ionicons } from '@expo/vector-icons';
 import { AddEntryScreenProps } from '../navigation/props';
 import { requestAllPermissions } from '../utils/permissions';
+import { ConfirmDeleteModal } from '../components/Base/ConfirmDeleteModal';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -27,6 +28,7 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [loading, setLoading] = useState(false);
   const [permissionHint, setPermissionHint] = useState<string>('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const clearDraft = useCallback(() => {
     setImageUri(null);
@@ -170,6 +172,16 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
     }
   };
 
+  const handleCancelPress = () => {
+    if (imageUri) {
+      setShowCancelModal(true);
+      return;
+    }
+
+    clearDraft();
+    navigation.goBack();
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
@@ -212,18 +224,47 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
         )}
       </View>
 
-      <TouchableOpacity 
-        style={[
-          styles.saveButton, 
-          { backgroundColor: (!imageUri || !location) ? colors.border : colors.primary }
-        ]} 
-        onPress={handleSave}
-        disabled={!imageUri || !location || loading}
-      >
-        <Text style={[styles.saveButtonText, { color: (!imageUri || !location) ? colors.textSecondary : '#FFF' }]}>
-          Save Entry
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.footerActions}>
+        <TouchableOpacity
+          style={[styles.cancelButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+          onPress={handleCancelPress}
+          disabled={loading}
+        >
+          <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.saveButton,
+            { backgroundColor: !imageUri || !location ? colors.border : colors.primary },
+          ]}
+          onPress={handleSave}
+          disabled={!imageUri || !location || loading}
+        >
+          <Text style={[styles.saveButtonText, { color: !imageUri || !location ? colors.textSecondary : '#FFF' }]}>
+            Save Entry
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ConfirmDeleteModal
+        visible={showCancelModal}
+        title="Discard this memory?"
+        message="Your captured photo and fetched location will be cleared if you cancel now."
+        confirmLabel="Discard"
+        cancelLabel="Keep Editing"
+        accentColor={colors.primary}
+        backgroundColor={colors.card}
+        textColor={colors.text}
+        secondaryTextColor={colors.textSecondary}
+        borderColor={colors.border}
+        onCancel={() => setShowCancelModal(false)}
+        onConfirm={() => {
+          setShowCancelModal(false);
+          clearDraft();
+          navigation.goBack();
+        }}
+      />
     </View>
   );
 };
@@ -277,11 +318,28 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
+  footerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
   saveButton: {
+    flex: 1,
     paddingVertical: 18,
     borderRadius: 20,
     alignItems: 'center',
-    marginBottom: 16,
   },
   saveButtonText: {
     fontFamily: 'Inter_600SemiBold',
