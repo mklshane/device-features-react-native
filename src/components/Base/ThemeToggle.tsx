@@ -1,36 +1,24 @@
-import React from "react";
-import { Pressable } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import React from 'react';
+import { TouchableOpacity, StyleSheet } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 
-type ThemeToggleProps = {
-  isDarkMode: boolean;
-  color: string;
-  onToggle: () => void;
-};
+export const ThemeToggle = () => {
+  const { theme, toggleTheme, colors } = useTheme();
 
-const ThemeToggle: React.FC<ThemeToggleProps> = ({
-  isDarkMode,
-  color,
-  onToggle,
-}) => {
   return (
-    <Pressable
-      onPress={onToggle}
-      hitSlop={12}
-      style={{
-        width: 40,
-        height: 40,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
+    <TouchableOpacity onPress={toggleTheme} style={styles.container}>
       <Ionicons
-        name={isDarkMode ? "sunny-outline" : "moon-outline"}
+        name={theme === 'light' ? 'moon' : 'sunny'}
         size={24}
-        color={color}
+        color={colors.text}
       />
-    </Pressable>
+    </TouchableOpacity>
   );
 };
 
-export default ThemeToggle;
+const styles = StyleSheet.create({
+  container: {
+    padding: 8,
+  },
+});

@@ -1,73 +1,44 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  ReactNode,
-} from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ThemeMode, ThemeColors, themeColors } from "../styles/colors";
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useColorScheme } from 'react-native';
+import { Colors } from '../styles/colors';
 
-interface ThemeContextProps {
-  theme: ThemeMode;
-  isDarkMode: boolean;
-  colors: ThemeColors;
+type Theme = 'light' | 'dark';
+
+interface ThemeContextType {
+  theme: Theme;
   toggleTheme: () => void;
+  colors: typeof Colors.light;
 }
 
-const ThemeContext = createContext<ThemeContextProps>({
-  theme: "light",
-  isDarkMode: false,
-  colors: themeColors.light,
-  toggleTheme: () => {},
-});
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-  const [theme, setTheme] = useState<ThemeMode>("light");
-  const [hydrated, setHydrated] = useState(false);
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const systemColorScheme = useColorScheme();
+  const [theme, setTheme] = useState<Theme>(systemColorScheme === 'dark' ? 'dark' : 'light');
 
-  // Load the last selected theme from local storage on mount.
   useEffect(() => {
-    const load = async () => {
-      try {
-        const stored = await AsyncStorage.getItem("theme-mode");
-        if (stored === "dark" || stored === "light") {
-          setTheme(stored);
-        }
-      } finally {
-        setHydrated(true);
-      }
-    };
-    load();
-  }, []);
+    if (systemColorScheme === 'light' || systemColorScheme === 'dark') {
+      setTheme(systemColorScheme);
+    }
+  }, [systemColorScheme]);
 
-  // Toggle between light and dark theme modes.
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Persist the selected theme after hydration completes.
-  useEffect(() => {
-    if (!hydrated) return;
-    AsyncStorage.setItem("theme-mode", theme).catch(() => {});
-  }, [theme, hydrated]);
-
-  const value = useMemo(
-    () => ({
-      theme,
-      isDarkMode: theme === "dark",
-      colors: themeColors[theme],
-      toggleTheme,
-    }),
-    [theme],
-  );
+  const colors = Colors[theme];
 
   return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ theme, toggleTheme, colors }}>
+      {children}
+    </ThemeContext.Provider>
   );
 };
 
-export const useTheme = () => useContext(ThemeContext);
-
-export default ThemeContext;
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};

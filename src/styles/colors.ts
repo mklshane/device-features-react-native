@@ -1,29 +1,18 @@
-export type ThemeMode = "light" | "dark";
-
-export interface ThemeColors {
-  background: string;
-  surface: string;
-  text: string;
-  textSecondary: string;
-  primary: string;
-  border: string;
-}
-
-export const themeColors: Record<ThemeMode, ThemeColors> = {
+export const Colors = {
   light: {
-    background: "#F7F9FC",
-    surface: "#FFFFFF",
-    text: "#111827",
-    textSecondary: "#4B5563",
-    primary: "#0A84FF",
-    border: "#E5E7EB",
+    background: '#F9F6F0',
+    card: '#FFFFFF',
+    text: '#2F4F4F',
+    textSecondary: '#667C7C',
+    primary: '#FF8A65',
+    border: '#EAE5D9',
   },
   dark: {
-    background: "#0B1220",
-    surface: "#111827",
-    text: "#F9FAFB",
-    textSecondary: "#9CA3AF",
-    primary: "#60A5FA",
-    border: "#1F2937",
-  },
+    background: '#1E2326',
+    card: '#2A3135',
+    text: '#EAEEED',
+    textSecondary: '#A0B0B0',
+    primary: '#E07A5F',
+    border: '#3A4246',
+  }
 };
