@@ -58,9 +58,20 @@ export const HomeScreen = ({ navigation }: HomeScreenProps) => {
           <Text style={[styles.cardLocation, { color: colors.text }]} numberOfLines={2}>
             {item.location.address || `${item.location.latitude.toFixed(2)}, ${item.location.longitude.toFixed(2)}`}
           </Text>
+          {item.description ? (
+            <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+              {item.description}
+            </Text>
+          ) : null}
         </View>
         <TouchableOpacity 
-          style={styles.deleteButton} 
+          style={[
+            styles.deleteButton,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.border,
+            },
+          ]}
           onPress={() => setEntryIdToDelete(item.id)}
         >
           <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
@@ -131,7 +142,15 @@ const styles = StyleSheet.create({
   cardContent: { paddingTop: 16, paddingHorizontal: 4 },
   cardDate: { fontFamily: 'Inter_600SemiBold', fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   cardLocation: { fontFamily: 'PlayfairDisplay_600SemiBold', fontSize: 18 },
-  deleteButton: { position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 12 },
+  cardDescription: { fontFamily: 'Inter_400Regular', fontSize: 14, marginTop: 8, lineHeight: 20 },
+  deleteButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 2,
+  },
   fab: {
     position: 'absolute',
     bottom: 32,

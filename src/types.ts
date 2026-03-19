@@ -9,4 +9,5 @@ export interface TravelEntry {
   imageUri: string;
   location: LocationData;
   timestamp: number;
+  description?: string;
 }
