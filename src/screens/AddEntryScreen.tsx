@@ -4,10 +4,10 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   Image,
   Alert,
   ActivityIndicator,
-  ActionSheetIOS,
   Platform,
   TextInput,
   KeyboardAvoidingView,
@@ -15,10 +15,12 @@ import {
   TouchableWithoutFeedback,
   ScrollView,
   LayoutChangeEvent,
+  Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { saveEntry } from '../utils/storage';
@@ -47,11 +49,16 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
   const [loading, setLoading] = useState(false);
   const [permissionHint, setPermissionHint] = useState<string>('');
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
   const [description, setDescription] = useState('');
+  const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('back');
+  const [torchEnabled, setTorchEnabled] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const descriptionY = useRef(0);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<React.ElementRef<typeof CameraView> | null>(null);
 
   const clearDraft = useCallback(() => {
     setImageUri(null);
@@ -79,7 +86,7 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
           }
 
           if (!permissionSummary.cameraGranted && !permissionSummary.mediaLibraryGranted) {
-            hintMessage = 'Choose Capture or Upload and grant access when prompted.';
+            hintMessage = 'Camera and gallery permissions are needed to add a photo.';
           }
 
           if (!permissionSummary.notificationGranted) {
@@ -155,26 +162,41 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
     return () => clearTimeout(timeout);
   }, [descriptionFocused, keyboardHeight, scrollDescriptionIntoView]);
 
+  const openCamera = async () => {
+    try {
+      const hasPermission = cameraPermission?.granted;
+      if (!hasPermission) {
+        const result = await requestCameraPermission();
+        if (!result.granted) {
+          Alert.alert('Permission Denied', 'Please grant camera access to take a picture.');
+          return;
+        }
+      }
+
+      setShowCameraModal(true);
+    } catch {
+      Alert.alert('Error', 'Failed to open camera');
+    }
+  };
+
   const takePicture = async () => {
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please grant camera access to take a picture.');
+      if (!cameraRef.current) {
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+      const result = await cameraRef.current.takePictureAsync({
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+      if (result?.uri) {
+        setShowCameraModal(false);
+        setTorchEnabled(false);
+        setImageUri(result.uri);
         await fetchLocation();
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to open camera');
+    } catch {
+      Alert.alert('Error', 'Failed to capture photo');
     }
   };
 
@@ -182,7 +204,7 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please grant photo library access to upload a picture.');
+        Alert.alert('Permission Denied', 'Please grant photo library access to choose a picture.');
         return;
       }
 
@@ -193,39 +215,14 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
       });
 
       if (!result.canceled && result.assets[0]) {
+        setShowCameraModal(false);
+        setTorchEnabled(false);
         setImageUri(result.assets[0].uri);
         await fetchLocation();
       }
     } catch {
-      Alert.alert('Error', 'Failed to open photo library');
+      Alert.alert('Error', 'Failed to open gallery');
     }
-  };
-
-  const chooseImageSource = () => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Capture Photo', 'Upload from Gallery'],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            void takePicture();
-          }
-
-          if (buttonIndex === 2) {
-            void pickImageFromGallery();
-          }
-        }
-      );
-      return;
-    }
-
-    Alert.alert('Choose Photo Source', 'Select how you want to add a memory image.', [
-      { text: 'Capture Photo', onPress: () => void takePicture() },
-      { text: 'Upload from Gallery', onPress: () => void pickImageFromGallery() },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
   };
 
   const fetchLocation = async () => {
@@ -341,16 +338,16 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
               {!imageUri ? (
                 <TouchableOpacity
                   style={[styles.cameraPlaceholder, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={chooseImageSource}
+                  onPress={openCamera}
                 >
-                  <Ionicons name="images" size={48} color={colors.primary} />
-                  <Text style={[styles.cameraText, { color: colors.textSecondary }]}>Add Memory Image</Text>
-                  <Text style={[styles.cameraSubtext, { color: colors.textSecondary }]}>Capture or upload from gallery</Text>
+                  <Ionicons name="camera" size={48} color={colors.primary} />
+                  <Text style={[styles.cameraText, { color: colors.textSecondary }]}>Capture Memory</Text>
+                  <Text style={[styles.cameraSubtext, { color: colors.textSecondary }]}>Tap to add a photo</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={styles.imageContainer}>
                   <Image source={{ uri: imageUri }} style={styles.previewImage} />
-                  <TouchableOpacity style={styles.retakeButton} onPress={chooseImageSource}>
+                  <TouchableOpacity style={styles.retakeButton} onPress={openCamera}>
                     <Ionicons name="refresh" size={20} color="#FFF" />
                   </TouchableOpacity>
                 </View>
@@ -421,6 +418,78 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
           </View>
         </View>
       </TouchableWithoutFeedback>
+
+      <Modal
+        visible={showCameraModal}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowCameraModal(false);
+          setTorchEnabled(false);
+        }}
+      >
+        <View style={styles.cameraModalContainer}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.cameraView}
+            facing={cameraFacing}
+            enableTorch={torchEnabled}
+          >
+            <View style={styles.cameraHeader}>
+              <Text style={styles.cameraTitle}>New Memory</Text>
+              <View style={styles.cameraHeaderActions}>
+                <Pressable
+                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+                  onPress={() => setTorchEnabled((value) => !value)}
+                  hitSlop={10}
+                >
+                  <Ionicons name={torchEnabled ? 'flash' : 'flash-off'} size={22} color="#FFF" />
+                </Pressable>
+
+                <Pressable
+                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+                  onPress={() => setCameraFacing((value) => (value === 'back' ? 'front' : 'back'))}
+                  hitSlop={10}
+                >
+                  <Ionicons name="camera-reverse" size={22} color="#FFF" />
+                </Pressable>
+
+                <Pressable
+                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+                  onPress={() => {
+                    setShowCameraModal(false);
+                    setTorchEnabled(false);
+                  }}
+                  hitSlop={10}
+                >
+                  <Ionicons name="close" size={24} color="#FFF" />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.cameraFooter}>
+              <View style={styles.cameraActionColumn}>
+                <Pressable
+                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+                  onPress={pickImageFromGallery}
+                  hitSlop={10}
+                >
+                  <Ionicons name="images" size={22} color="#FFF" />
+                </Pressable>
+                <Text style={styles.cameraActionLabel}>Gallery</Text>
+              </View>
+
+              <View style={styles.captureColumn}>
+                <Pressable style={styles.captureButtonOuter} onPress={takePicture} hitSlop={10}>
+                  <View style={styles.captureButtonInner} />
+                </Pressable>
+                <Text style={styles.captureLabel}>Capture</Text>
+              </View>
+
+              <View style={styles.cameraIconSpacer} />
+            </View>
+          </CameraView>
+        </View>
+      </Modal>
 
       <ConfirmDeleteModal
         visible={showCancelModal}
@@ -549,5 +618,85 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 16,
     letterSpacing: 0.5,
-  }
+  },
+  cameraModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  cameraView: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  cameraHeader: {
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cameraHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cameraTitle: {
+    color: '#FFF',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 17,
+    letterSpacing: 0.3,
+  },
+  cameraFooter: {
+    paddingHorizontal: 28,
+    paddingBottom: 34,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  cameraActionColumn: {
+    alignItems: 'center',
+    width: 64,
+  },
+  captureColumn: {
+    alignItems: 'center',
+  },
+  cameraIconButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraActionLabel: {
+    marginTop: 8,
+    color: '#FFF',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
+  },
+  cameraIconSpacer: {
+    width: 64,
+    height: 64,
+  },
+  captureButtonOuter: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  captureButtonInner: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFF',
+  },
+  captureLabel: {
+    marginTop: 10,
+    color: '#FFF',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
 });
