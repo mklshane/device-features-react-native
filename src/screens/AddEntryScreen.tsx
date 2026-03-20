@@ -3,19 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Pressable,
-  Image,
   Alert,
-  ActivityIndicator,
   Platform,
-  TextInput,
   KeyboardAvoidingView,
   Keyboard,
   TouchableWithoutFeedback,
   ScrollView,
   LayoutChangeEvent,
-  Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -25,10 +19,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { saveEntry } from '../utils/storage';
 import { LocationData } from '../types';
-import { Ionicons } from '@expo/vector-icons';
 import { AddEntryScreenProps } from '../navigation/props';
 import { requestAllPermissions } from '../utils/permissions';
 import { ConfirmDeleteModal } from '../components/Base/ConfirmDeleteModal';
+import { ImageSection } from '../components/AddEntry/ImageSection';
+import { LocationSection } from '../components/AddEntry/LocationSection';
+import { DescriptionSection } from '../components/AddEntry/DescriptionSection';
+import { FooterActions } from '../components/AddEntry/FooterActions';
+import { CameraCaptureModal } from '../components/AddEntry/CameraCaptureModal';
 
 const DESCRIPTION_MAX_LENGTH = 140;
 
@@ -293,8 +291,16 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
         });
       }
 
-      clearDraft();
-      navigation.goBack();
+      setLoading(false);
+      Alert.alert('Saved', 'Entry saved successfully.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            clearDraft();
+            navigation.goBack();
+          },
+        },
+      ]);
     } catch (error) {
       Alert.alert('Error', 'Could not save the entry.');
       setLoading(false);
@@ -310,6 +316,13 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
     clearDraft();
     navigation.goBack();
   };
+
+  const closeCameraModal = () => {
+    setShowCameraModal(false);
+    setTorchEnabled(false);
+  };
+
+  const canSave = Boolean(imageUri && location);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -335,161 +348,62 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
                 </View>
               ) : null}
 
-              {!imageUri ? (
-                <TouchableOpacity
-                  style={[styles.cameraPlaceholder, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={openCamera}
-                >
-                  <Ionicons name="camera" size={48} color={colors.primary} />
-                  <Text style={[styles.cameraText, { color: colors.textSecondary }]}>Capture Memory</Text>
-                  <Text style={[styles.cameraSubtext, { color: colors.textSecondary }]}>Tap to add a photo</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.imageContainer}>
-                  <Image source={{ uri: imageUri }} style={styles.previewImage} />
-                  <TouchableOpacity style={styles.retakeButton} onPress={openCamera}>
-                    <Ionicons name="refresh" size={20} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-              )}
+              <ImageSection
+                imageUri={imageUri}
+                cardColor={colors.card}
+                borderColor={colors.border}
+                primaryColor={colors.primary}
+                textSecondaryColor={colors.textSecondary}
+                onOpenCamera={openCamera}
+              />
 
-              {loading ? (
-                <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
-              ) : (
-                location && (
-                  <View style={styles.locationContainer}>
-                    <Ionicons name="location" size={20} color={colors.primary} />
-                    <Text style={[styles.locationText, { color: colors.text }]}>
-                      {location.address || 'Unknown Location'}
-                    </Text>
-                  </View>
-                )
-              )}
+              <LocationSection
+                loading={loading}
+                location={location}
+                primaryColor={colors.primary}
+                textColor={colors.text}
+              />
 
-              <View style={styles.descriptionSection} onLayout={captureDescriptionPosition}>
-                <Text style={[styles.descriptionLabel, { color: colors.text }]}>Description (optional)</Text>
-                <TextInput
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Add a short note about this memory"
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  maxLength={DESCRIPTION_MAX_LENGTH}
-                  style={[
-                    styles.descriptionInput,
-                    {
-                      color: colors.text,
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
-                  textAlignVertical="top"
-                  onFocus={handleDescriptionFocus}
-                  onBlur={handleDescriptionBlur}
-                />
-                <Text style={[styles.descriptionCount, { color: colors.textSecondary }]}>
-                  {description.length}/{DESCRIPTION_MAX_LENGTH}
-                </Text>
-              </View>
+              <DescriptionSection
+                value={description}
+                maxLength={DESCRIPTION_MAX_LENGTH}
+                textColor={colors.text}
+                textSecondaryColor={colors.textSecondary}
+                borderColor={colors.border}
+                cardColor={colors.card}
+                onChangeText={setDescription}
+                onFocus={handleDescriptionFocus}
+                onBlur={handleDescriptionBlur}
+                onLayout={captureDescriptionPosition}
+              />
             </ScrollView>
           </KeyboardAvoidingView>
 
-          <View style={styles.footerActions}>
-            <TouchableOpacity
-              style={[styles.cancelButton, { borderColor: colors.border, backgroundColor: colors.card }]}
-              onPress={handleCancelPress}
-              disabled={loading}
-            >
-              <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                { backgroundColor: !imageUri || !location ? colors.border : colors.primary },
-              ]}
-              onPress={handleSave}
-              disabled={!imageUri || !location || loading}
-            >
-              <Text style={[styles.saveButtonText, { color: !imageUri || !location ? colors.textSecondary : '#FFF' }]}>
-                Save Entry
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <FooterActions
+            canSave={canSave}
+            loading={loading}
+            primaryColor={colors.primary}
+            borderColor={colors.border}
+            cardColor={colors.card}
+            textColor={colors.text}
+            textSecondaryColor={colors.textSecondary}
+            onCancel={handleCancelPress}
+            onSave={handleSave}
+          />
         </View>
       </TouchableWithoutFeedback>
 
-      <Modal
+      <CameraCaptureModal
         visible={showCameraModal}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowCameraModal(false);
-          setTorchEnabled(false);
-        }}
-      >
-        <View style={styles.cameraModalContainer}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.cameraView}
-            facing={cameraFacing}
-            enableTorch={torchEnabled}
-          >
-            <View style={styles.cameraHeader}>
-              <Text style={styles.cameraTitle}>New Memory</Text>
-              <View style={styles.cameraHeaderActions}>
-                <Pressable
-                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
-                  onPress={() => setTorchEnabled((value) => !value)}
-                  hitSlop={10}
-                >
-                  <Ionicons name={torchEnabled ? 'flash' : 'flash-off'} size={22} color="#FFF" />
-                </Pressable>
-
-                <Pressable
-                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
-                  onPress={() => setCameraFacing((value) => (value === 'back' ? 'front' : 'back'))}
-                  hitSlop={10}
-                >
-                  <Ionicons name="camera-reverse" size={22} color="#FFF" />
-                </Pressable>
-
-                <Pressable
-                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
-                  onPress={() => {
-                    setShowCameraModal(false);
-                    setTorchEnabled(false);
-                  }}
-                  hitSlop={10}
-                >
-                  <Ionicons name="close" size={24} color="#FFF" />
-                </Pressable>
-              </View>
-            </View>
-
-            <View style={styles.cameraFooter}>
-              <View style={styles.cameraActionColumn}>
-                <Pressable
-                  style={[styles.cameraIconButton, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
-                  onPress={pickImageFromGallery}
-                  hitSlop={10}
-                >
-                  <Ionicons name="images" size={22} color="#FFF" />
-                </Pressable>
-                <Text style={styles.cameraActionLabel}>Gallery</Text>
-              </View>
-
-              <View style={styles.captureColumn}>
-                <Pressable style={styles.captureButtonOuter} onPress={takePicture} hitSlop={10}>
-                  <View style={styles.captureButtonInner} />
-                </Pressable>
-                <Text style={styles.captureLabel}>Capture</Text>
-              </View>
-
-              <View style={styles.cameraIconSpacer} />
-            </View>
-          </CameraView>
-        </View>
-      </Modal>
+        cameraRef={cameraRef}
+        cameraFacing={cameraFacing}
+        torchEnabled={torchEnabled}
+        onToggleTorch={() => setTorchEnabled((value) => !value)}
+        onSwitchCamera={() => setCameraFacing((value) => (value === 'back' ? 'front' : 'back'))}
+        onClose={closeCameraModal}
+        onPickFromGallery={pickImageFromGallery}
+        onCapture={takePicture}
+      />
 
       <ConfirmDeleteModal
         visible={showCancelModal}
@@ -528,175 +442,5 @@ const styles = StyleSheet.create({
   permissionNoticeText: {
     fontFamily: 'Inter_400Regular',
     fontSize: 13,
-  },
-  cameraPlaceholder: {
-    height: 350,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cameraText: { fontFamily: 'Inter_600SemiBold', marginTop: 16, fontSize: 16 },
-  cameraSubtext: { fontFamily: 'Inter_400Regular', marginTop: 6, fontSize: 13 },
-  imageContainer: {
-    height: 350,
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  previewImage: { width: '100%', height: '100%' },
-  retakeButton: {
-    position: 'absolute', top: 16, right: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 10, borderRadius: 20,
-  },
-  loader: { marginTop: 32 },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 24,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.03)',
-  },
-  locationText: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: 15,
-    marginLeft: 8,
-    flex: 1,
-  },
-  descriptionSection: {
-    marginTop: 20,
-  },
-  descriptionLabel: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  descriptionInput: {
-    minHeight: 88,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-  },
-  descriptionCount: {
-    marginTop: 6,
-    textAlign: 'right',
-    fontFamily: 'Inter_400Regular',
-    fontSize: 12,
-  },
-  footerActions: {
-    position: 'absolute',
-    left: 24,
-    right: 24,
-    bottom: 40,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 16,
-    letterSpacing: 0.3,
-  },
-  saveButton: {
-    flex: 1,
-    paddingVertical: 18,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
-  cameraModalContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  cameraView: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  cameraHeader: {
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  cameraHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  cameraTitle: {
-    color: '#FFF',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 17,
-    letterSpacing: 0.3,
-  },
-  cameraFooter: {
-    paddingHorizontal: 28,
-    paddingBottom: 34,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  cameraActionColumn: {
-    alignItems: 'center',
-    width: 64,
-  },
-  captureColumn: {
-    alignItems: 'center',
-  },
-  cameraIconButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cameraActionLabel: {
-    marginTop: 8,
-    color: '#FFF',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 12,
-  },
-  cameraIconSpacer: {
-    width: 64,
-    height: 64,
-  },
-  captureButtonOuter: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 4,
-    borderColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  captureButtonInner: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#FFF',
-  },
-  captureLabel: {
-    marginTop: 10,
-    color: '#FFF',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 13,
-    letterSpacing: 0.3,
   },
 });
