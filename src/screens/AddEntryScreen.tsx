@@ -159,6 +159,112 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
     setShowPhotoSourceModal(true);
   };
 
+  const toSignedCoordinate = (value: unknown, ref: unknown) => {
+    const parseCoordinatePart = (raw: unknown): number => {
+      if (typeof raw === 'number') {
+        return raw;
+      }
+
+      if (typeof raw === 'string') {
+        return Number(raw);
+      }
+
+      if (raw && typeof raw === 'object') {
+        const maybeRational = raw as { numerator?: unknown; denominator?: unknown };
+        const numerator = Number(maybeRational.numerator);
+        const denominator = Number(maybeRational.denominator);
+
+        if (!Number.isNaN(numerator) && !Number.isNaN(denominator) && denominator !== 0) {
+          return numerator / denominator;
+        }
+      }
+
+      return Number.NaN;
+    };
+
+    const parseCoordinate = (raw: unknown): number | null => {
+      if (typeof raw === 'number') {
+        return Number.isFinite(raw) ? raw : null;
+      }
+
+      if (typeof raw === 'string') {
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      if (Array.isArray(raw) && raw.length > 0) {
+        const [degreesRaw, minutesRaw = 0, secondsRaw = 0] = raw;
+        const degrees = parseCoordinatePart(degreesRaw);
+        const minutes = parseCoordinatePart(minutesRaw);
+        const seconds = parseCoordinatePart(secondsRaw);
+
+        if ([degrees, minutes, seconds].some((num) => Number.isNaN(num))) {
+          return null;
+        }
+
+        const absolute = Math.abs(degrees) + minutes / 60 + seconds / 3600;
+        return degrees < 0 ? -absolute : absolute;
+      }
+
+      return null;
+    };
+
+    const coordinate = parseCoordinate(value);
+    if (coordinate === null) {
+      return null;
+    }
+
+    if (typeof ref !== 'string') {
+      return coordinate;
+    }
+
+    const normalizedRef = ref.toUpperCase();
+    if (normalizedRef === 'S' || normalizedRef === 'W') {
+      return -Math.abs(coordinate);
+    }
+
+    return Math.abs(coordinate);
+  };
+
+  const extractCoordinatesFromExif = (exif?: Record<string, unknown> | null) => {
+    if (!exif) {
+      return null;
+    }
+
+    const latitude =
+      toSignedCoordinate(exif.GPSLatitude, exif.GPSLatitudeRef) ??
+      toSignedCoordinate(exif.latitude, exif.latitudeRef);
+    const longitude =
+      toSignedCoordinate(exif.GPSLongitude, exif.GPSLongitudeRef) ??
+      toSignedCoordinate(exif.longitude, exif.longitudeRef);
+
+    if (latitude === null || longitude === null) {
+      return null;
+    }
+
+    return { latitude, longitude };
+  };
+
+  const getAddressString = async (latitude: number, longitude: number) => {
+    try {
+      const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+      if (geocode.length === 0) {
+        return '';
+      }
+
+      const place = geocode[0];
+      return [place.city, place.region, place.country].filter(Boolean).join(', ');
+    } catch (error) {
+      console.warn('Geocoding failed', error);
+      return '';
+    }
+  };
+
+  const setLocationFromCoordinates = async (latitude: number, longitude: number) => {
+    const address = await getAddressString(latitude, longitude);
+    setLocation({ latitude, longitude, address });
+  };
+
   const takePictureWithCamera = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -180,7 +286,7 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
       }
 
       setImageUri(result.assets[0].uri);
-      await fetchLocation();
+      await fetchCurrentLocation();
     } catch {
       Alert.alert('Error', 'Failed to open camera');
     }
@@ -196,22 +302,34 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        // Keep EXIF metadata intact so photo GPS can be read.
+        allowsEditing: false,
         quality: 0.8,
+        exif: true,
       });
 
       setShowPhotoSourceModal(false);
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
-        await fetchLocation();
+        const selectedAsset = result.assets[0];
+        setImageUri(selectedAsset.uri);
+
+        const imageCoordinates = extractCoordinatesFromExif(
+          selectedAsset.exif as Record<string, unknown> | undefined
+        );
+
+        if (imageCoordinates) {
+          await setLocationFromCoordinates(imageCoordinates.latitude, imageCoordinates.longitude);
+        } else {
+          await fetchCurrentLocation();
+        }
       }
     } catch {
       Alert.alert('Error', 'Failed to open gallery');
     }
   };
 
-  const fetchLocation = async () => {
+  const fetchCurrentLocation = async () => {
     setLoading(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -222,26 +340,10 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
       }
 
       const currentLocation = await Location.getCurrentPositionAsync({});
-      let addressString = '';
-
-      try {
-        const geocode = await Location.reverseGeocodeAsync({
-          latitude: currentLocation.coords.latitude,
-          longitude: currentLocation.coords.longitude,
-        });
-        if (geocode.length > 0) {
-          const place = geocode[0];
-          addressString = [place.city, place.region, place.country].filter(Boolean).join(', ');
-        }
-      } catch (e) {
-        console.warn('Geocoding failed', e);
-      }
-
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        address: addressString,
-      });
+      await setLocationFromCoordinates(
+        currentLocation.coords.latitude,
+        currentLocation.coords.longitude
+      );
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch location');
     } finally {
