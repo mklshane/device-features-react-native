@@ -14,7 +14,6 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { saveEntry } from '../utils/storage';
@@ -26,7 +25,7 @@ import { ImageSection } from '../components/AddEntry/ImageSection';
 import { LocationSection } from '../components/AddEntry/LocationSection';
 import { DescriptionSection } from '../components/AddEntry/DescriptionSection';
 import { FooterActions } from '../components/AddEntry/FooterActions';
-import { CameraCaptureModal } from '../components/AddEntry/CameraCaptureModal';
+import { PhotoSourceModal } from '../components/AddEntry/PhotoSourceModal';
 
 const DESCRIPTION_MAX_LENGTH = 140;
 
@@ -47,16 +46,12 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
   const [loading, setLoading] = useState(false);
   const [permissionHint, setPermissionHint] = useState<string>('');
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
   const [description, setDescription] = useState('');
-  const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('back');
-  const [torchEnabled, setTorchEnabled] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const descriptionY = useRef(0);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const cameraRef = useRef<React.ElementRef<typeof CameraView> | null>(null);
 
   const clearDraft = useCallback(() => {
     setImageUri(null);
@@ -160,41 +155,34 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
     return () => clearTimeout(timeout);
   }, [descriptionFocused, keyboardHeight, scrollDescriptionIntoView]);
 
-  const openCamera = async () => {
-    try {
-      const hasPermission = cameraPermission?.granted;
-      if (!hasPermission) {
-        const result = await requestCameraPermission();
-        if (!result.granted) {
-          Alert.alert('Permission Denied', 'Please grant camera access to take a picture.');
-          return;
-        }
-      }
-
-      setShowCameraModal(true);
-    } catch {
-      Alert.alert('Error', 'Failed to open camera');
-    }
+  const openPhotoSourceModal = () => {
+    setShowPhotoSourceModal(true);
   };
 
-  const takePicture = async () => {
+  const takePictureWithCamera = async () => {
     try {
-      if (!cameraRef.current) {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please grant camera access to take a picture.');
         return;
       }
 
-      const result = await cameraRef.current.takePictureAsync({
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
         quality: 0.8,
       });
 
-      if (result?.uri) {
-        setShowCameraModal(false);
-        setTorchEnabled(false);
-        setImageUri(result.uri);
-        await fetchLocation();
+      setShowPhotoSourceModal(false);
+
+      if (result.canceled || !result.assets[0]) {
+        return;
       }
+
+      setImageUri(result.assets[0].uri);
+      await fetchLocation();
     } catch {
-      Alert.alert('Error', 'Failed to capture photo');
+      Alert.alert('Error', 'Failed to open camera');
     }
   };
 
@@ -212,9 +200,9 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
         quality: 0.8,
       });
 
+      setShowPhotoSourceModal(false);
+
       if (!result.canceled && result.assets[0]) {
-        setShowCameraModal(false);
-        setTorchEnabled(false);
         setImageUri(result.assets[0].uri);
         await fetchLocation();
       }
@@ -291,16 +279,8 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
         });
       }
 
-      setLoading(false);
-      Alert.alert('Saved', 'Entry saved successfully.', [
-        {
-          text: 'OK',
-          onPress: () => {
-            clearDraft();
-            navigation.goBack();
-          },
-        },
-      ]);
+      clearDraft();
+      navigation.goBack();
     } catch (error) {
       Alert.alert('Error', 'Could not save the entry.');
       setLoading(false);
@@ -315,11 +295,6 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
 
     clearDraft();
     navigation.goBack();
-  };
-
-  const closeCameraModal = () => {
-    setShowCameraModal(false);
-    setTorchEnabled(false);
   };
 
   const canSave = Boolean(imageUri && location);
@@ -354,7 +329,7 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
                 borderColor={colors.border}
                 primaryColor={colors.primary}
                 textSecondaryColor={colors.textSecondary}
-                onOpenCamera={openCamera}
+                onOpenCamera={openPhotoSourceModal}
               />
 
               <LocationSection
@@ -393,16 +368,16 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
         </View>
       </TouchableWithoutFeedback>
 
-      <CameraCaptureModal
-        visible={showCameraModal}
-        cameraRef={cameraRef}
-        cameraFacing={cameraFacing}
-        torchEnabled={torchEnabled}
-        onToggleTorch={() => setTorchEnabled((value) => !value)}
-        onSwitchCamera={() => setCameraFacing((value) => (value === 'back' ? 'front' : 'back'))}
-        onClose={closeCameraModal}
-        onPickFromGallery={pickImageFromGallery}
-        onCapture={takePicture}
+      <PhotoSourceModal
+        visible={showPhotoSourceModal}
+        accentColor={colors.primary}
+        backgroundColor={colors.card}
+        textColor={colors.text}
+        secondaryTextColor={colors.textSecondary}
+        borderColor={colors.border}
+        onClose={() => setShowPhotoSourceModal(false)}
+        onChooseCamera={takePictureWithCamera}
+        onChooseUpload={pickImageFromGallery}
       />
 
       <ConfirmDeleteModal
@@ -423,6 +398,7 @@ export const AddEntryScreen = ({ navigation }: AddEntryScreenProps) => {
           navigation.goBack();
         }}
       />
+
     </View>
   );
 };
